@@ -7,17 +7,12 @@ const origins = (process.env.ORIGIN ?? "")
   .filter(Boolean);
 
 const io = new Server({
-  cors: {
-    origin: origins,
-  },
+  cors: { origin: origins },
 });
 
 const port = Number(process.env.PORT);
 
-io.listen(port);
-console.log(`Server is running on port ${port}`);
-
-type OnlineUser = {
+type User = {
   socketId: string;
   userId: string;
 };
@@ -28,75 +23,77 @@ type ChatMessagePayload = {
   timestamp?: string;
 };
 
-let onlineUsers: OnlineUser[] = [];
+const meets: Record<string, User[]> = {};
 
 io.on("connection", (socket: Socket) => {
-  onlineUsers.push({ socketId: socket.id, userId: "" });
-  io.emit("usersOnline", onlineUsers);
-  console.log(
-    "A user connected with id: ",
-    socket.id,
-    " there are now ",
-    onlineUsers.length,
-    " online users",
-  );
+  console.log("New connection:", socket.id);
 
-  socket.on("newUser", (userId: string) => {
-    if (!userId) {
+  socket.on("joinMeet", (meetId: string) => {
+    if (!meetId) return;
+
+    const userList = meets[meetId] ?? [];
+
+    if (userList.length >= 2) {
+      socket.emit("meetFull");
       return;
     }
 
-    const existingUserIndex = onlineUsers.findIndex(
-      (user) => user.socketId === socket.id,
-    );
+    meets[meetId] = [...userList, { socketId: socket.id, userId: "" }];
+    socket.join(meetId);
 
-    if (existingUserIndex !== -1) {
-      onlineUsers[existingUserIndex] = { socketId: socket.id, userId };
-    } else if (!onlineUsers.some((user) => user.userId === userId)) {
-      onlineUsers.push({ socketId: socket.id, userId });
-    } else {
-      onlineUsers = onlineUsers.map((user) =>
-        user.userId === userId ? { socketId: socket.id, userId } : user,
-      );
-    }
-
-    io.emit("usersOnline", onlineUsers);
+    io.to(meetId).emit("usersOnline", meets[meetId]);
+    console.log("User joined meet:", meetId, meets[meetId]);
   });
 
-  socket.on("chat:message", (payload: ChatMessagePayload) => {
-    const trimmedMessage = payload?.message?.trim();
+  socket.on("newUser", (meetId: string, userId: string) => {
+    if (!meetId || !userId) return;
 
-    if (!trimmedMessage) {
-      return;
-    }
+    const users = meets[meetId];
+    if (!users) return;
 
-    const sender =
-      onlineUsers.find((user) => user.socketId === socket.id) ?? null;
+    meets[meetId] = users.map((u) =>
+      u.socketId === socket.id ? { socketId: socket.id, userId } : u,
+    );
+
+    io.to(meetId).emit("usersOnline", meets[meetId]);
+  });
+
+  socket.on("sendMessage", (meetId: string, payload: ChatMessagePayload) => {
+    const trimmed = payload?.message?.trim();
+    if (!trimmed) return;
+
+    const users = meets[meetId] ?? [];
+
+    const sender = users.find((u) => u.socketId === socket.id);
 
     const outgoingMessage = {
       userId: payload.userId || sender?.userId || socket.id,
-      message: trimmedMessage,
+      message: trimmed,
       timestamp: payload.timestamp ?? new Date().toISOString(),
     };
 
-    io.emit("chat:message", outgoingMessage);
-    console.log(
-      "Relayed chat message from: ",
-      outgoingMessage.userId,
-      " message: ",
-      outgoingMessage.message,
-    );
+    io.to(meetId).emit("newMessage", outgoingMessage);
   });
 
   socket.on("disconnect", () => {
-    onlineUsers = onlineUsers.filter((user) => user.socketId !== socket.id);
-    io.emit("usersOnline", onlineUsers);
-    console.log(
-      "A user disconnected with id: ",
-      socket.id,
-      " there are now ",
-      onlineUsers.length,
-      " online users",
-    );
+    for (const meetId of Object.keys(meets)) {
+      const before = meets[meetId].length;
+
+      meets[meetId] = meets[meetId].filter((u) => u.socketId !== socket.id);
+
+      const after = meets[meetId].length;
+
+      if (before !== after) {
+        io.to(meetId).emit("usersOnline", meets[meetId]);
+        console.log("User disconnected from meet", meetId);
+      }
+
+      if (meets[meetId].length === 0) {
+        delete meets[meetId];
+      }
+    }
   });
 });
+
+io.listen(port);
+console.log(`Server running on port ${port}`);
