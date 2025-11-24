@@ -17,98 +17,46 @@ type ChatMessagePayload = {
   timestamp?: string;
 };
 
-type ActiveUser = {
+type User = {
   userId: string;
   socketId: string;
-};
-
-type Meeting = {
-  userId: string | null;
-  socketId: string | null;
-  description: string | null;
-  is_active: boolean | null;
-  active_users: ActiveUser[];
-  startAt: string | null;
-  finishAt: string | null;
-  createdAt: string | null;
+  name?: string | null;
+  email?: string | null;
+  age?: number | null;
+  photoURL?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 };
 
 type BackendError = { error: string };
 
 io.on("connection", (socket: Socket) => {
-  socket.on("joinMeet", async (userId: string, meetId: string) => {
+  socket.on("newUser", async (userId: string, meetId: string) => {
     if (!meetId || !userId) return;
 
-    const meet = await request<Meeting | BackendError>({
-      method: "GET",
-      endpoint: `/meets/${meetId}`,
-    });
-
-    if (!meet || "error" in meet) {
-      socket.emit("error", {
-        origin: "joinMeet",
-        message: meet && "error" in meet ? meet.error : "Error inesperado",
-      });
-      return;
-    }
-
-    if (meet.active_users.length >= 10) {
-      socket.emit("meetFull");
-      return;
-    }
-
-    const meetUsers = await request<ActiveUser[] | BackendError>({
+    const user = await request<User | BackendError>({
       method: "PUT",
-      endpoint: `/meetings/addUser/${meetId}`,
-      data: { userId: userId, socketId: socket.id },
-      headers: { "Content-Type": "application/json" },
-    });
-
-    if (!meetUsers || "error" in meetUsers) {
-      socket.emit("error", {
-        origin: "joinMeet",
-        message:
-          meetUsers && "error" in meetUsers
-            ? meetUsers.error
-            : "Error inesperado",
-      });
-      return;
-    }
-
-    socket.join(meetId);
-
-    io.to(meetId).emit("usersOnline", meetUsers);
-  });
-
-  socket.on("newUser", async (meetId: string, userId: string) => {
-    if (!meetId || !userId) return;
-
-    const updatedUser = await request<ActiveUser | BackendError>({
-      method: "PUT",
-      endpoint: `/meetings/updateMeetingUser/${meetId}`,
+      endpoint: `/meetings/updateOrAddMeetingUser/${meetId}`,
       data: { userId, socketId: socket.id },
       headers: { "Content-Type": "application/json" },
     });
 
-    if (!updatedUser || "error" in updatedUser) {
-      socket.emit("error", {
-        origin: "joinMeet",
-        message:
-          updatedUser && "error" in updatedUser
-            ? updatedUser.error
-            : "Error inesperado",
+    if (!user || "error" in user) {
+      socket.emit("socketServerError", {
+        origin: "newUser",
+        message: user && "error" in user ? user.error : "Error inesperado",
       });
       return;
     }
 
-    const meetUsers = await request<ActiveUser[] | BackendError>({
+    const meetUsers = await request<User[] | BackendError>({
       method: "GET",
       endpoint: `/meets/getMeetingUsers/${meetId}`,
     });
 
     if (!meetUsers || "error" in meetUsers) {
-      socket.emit("error", {
-        origin: "joinMeet",
+      socket.emit("socketServerError", {
+        origin: "newUser",
         message:
           meetUsers && "error" in meetUsers
             ? meetUsers.error
@@ -134,7 +82,7 @@ io.on("connection", (socket: Socket) => {
   });
 
   socket.on("disconnect", async (userId: string, meetId: string) => {
-    const meetUsers = await request<ActiveUser[]>({
+    const meetUsers = await request<User[]>({
       method: "POST",
       endpoint: `/meetings/removeUser/${meetId}`,
       data: { userId: userId },
@@ -142,8 +90,8 @@ io.on("connection", (socket: Socket) => {
     });
 
     if (!meetUsers || "error" in meetUsers) {
-      socket.emit("error", {
-        origin: "joinMeet",
+      socket.emit("socketServerError", {
+        origin: "disconnect",
         message:
           meetUsers && "error" in meetUsers
             ? meetUsers.error
