@@ -32,62 +32,95 @@ type BackendError = { error: string };
 
 io.on("connection", (socket: Socket) => {
   socket.on("newUser", async (userId: string, meetId: string) => {
-    if (!meetId || !userId) return;
+    console.log(`Attempting to register new user.`);
 
-    const meetUsers = await request<UserWithSocketId | BackendError>({
-      method: "PUT",
-      endpoint: `/api/meetings/updateOrAddMeetingUser/${meetId}`,
-      data: { userId, socketId: socket.id },
-      headers: { "Content-Type": "application/json" },
-    });
+    try {
+      if (!meetId || !userId) return;
 
-    if (!meetUsers || "error" in meetUsers) {
-      socket.emit("socketServerError", {
-        origin: "newUser",
-        message:
-          meetUsers && "error" in meetUsers
-            ? meetUsers.error
-            : "Error inesperado",
+      const meetUsers = await request<UserWithSocketId[] | BackendError>({
+        method: "PUT",
+        endpoint: `/api/meetings/updateOrAddMeetingUser/${meetId}`,
+        data: { userId, socketId: socket.id },
+        headers: { "Content-Type": "application/json" },
       });
-      return;
-    }
 
-    io.to(meetId).emit("usersOnline", meetUsers);
+      socket.join(meetId);
+
+      if (!meetUsers || "error" in meetUsers) {
+        socket.emit("socketServerError", {
+          origin: "newUser",
+          message:
+            meetUsers && "error" in meetUsers
+              ? meetUsers.error
+              : "Error inesperado",
+        });
+        return;
+      }
+
+      console.log(
+        `New user with id ${userId}, there's ${meetUsers.length} users.`,
+      );
+
+      io.to(meetId).emit("usersOnline", meetUsers);
+    } catch (error) {
+      socket.emit("socketServerError", {
+        origin: "backend",
+        message: error instanceof Error ? error.message : "Error inesperado",
+      });
+    }
   });
 
   socket.on("sendMessage", (meetId: string, payload: ChatMessagePayload) => {
-    const trimmed = payload?.message?.trim();
-    if (!trimmed) return;
+    console.log(`Attempting to send new message.`);
 
-    const outgoing = {
-      userId: payload.userId,
-      message: trimmed,
-      timestamp: payload.timestamp ?? new Date().toISOString(),
-    };
+    try {
+      const trimmed = payload?.message?.trim();
+      if (!trimmed) return;
 
-    io.to(meetId).emit("newMessage", outgoing);
+      const outgoing = {
+        userId: payload.userId,
+        message: trimmed,
+        timestamp: payload.timestamp ?? new Date().toISOString(),
+      };
+
+      console.log(`New message from user with id ${payload.userId} sent.`);
+
+      io.to(meetId).emit("newMessage", outgoing);
+    } catch (error) {
+      socket.emit("socketServerError", {
+        origin: "backend",
+        message: error instanceof Error ? error.message : "Error inesperado",
+      });
+    }
   });
 
   socket.on("disconnect", async (userId: string, meetId: string) => {
-    const meetUsers = await request<UserWithSocketId[]>({
-      method: "POST",
-      endpoint: `/api/meetings/removeUser/${meetId}`,
-      data: { userId: userId },
-      headers: { "Content-Type": "application/json" },
-    });
-
-    if (!meetUsers || "error" in meetUsers) {
-      socket.emit("socketServerError", {
-        origin: "disconnect",
-        message:
-          meetUsers && "error" in meetUsers
-            ? meetUsers.error
-            : "Error inesperado",
+    try {
+      const meetUsers = await request<UserWithSocketId[]>({
+        method: "POST",
+        endpoint: `/api/meetings/removeUser/${meetId}`,
+        data: { userId },
+        headers: { "Content-Type": "application/json" },
       });
-      return;
-    }
 
-    io.to(meetId).emit("usersOnline", meetUsers);
+      if (!meetUsers || "error" in meetUsers) {
+        socket.emit("socketServerError", {
+          origin: "disconnect",
+          message:
+            meetUsers && "error" in meetUsers
+              ? meetUsers.error
+              : "Error inesperado",
+        });
+        return;
+      }
+
+      io.to(meetId).emit("usersOnline", meetUsers);
+    } catch (error) {
+      socket.emit("socketServerError", {
+        origin: "backend",
+        message: error instanceof Error ? error.message : "Error inesperado",
+      });
+    }
   });
 });
 
