@@ -17,7 +17,7 @@ type ChatMessagePayload = {
   timestamp?: string;
 };
 
-type User = {
+type UserWithSocketId = {
   userId: string;
   socketId: string;
   name?: string | null;
@@ -34,9 +34,9 @@ io.on("connection", (socket: Socket) => {
   socket.on("newUser", async (userId: string, meetId: string) => {
     if (!meetId || !userId) return;
 
-    const user = await request<User | BackendError>({
+    const user = await request<UserWithSocketId | BackendError>({
       method: "PUT",
-      endpoint: `/meetings/updateOrAddMeetingUser/${meetId}`,
+      endpoint: `/api/meetings/updateOrAddMeetingUser/${meetId}`,
       data: { userId, socketId: socket.id },
       headers: { "Content-Type": "application/json" },
     });
@@ -49,9 +49,9 @@ io.on("connection", (socket: Socket) => {
       return;
     }
 
-    const meetUsers = await request<User[] | BackendError>({
+    const meetUsers = await request<UserWithSocketId[] | BackendError>({
       method: "GET",
-      endpoint: `/meets/getMeetingUsers/${meetId}`,
+      endpoint: `/api/meets/getMeetingUsers/${meetId}`,
     });
 
     if (!meetUsers || "error" in meetUsers) {
@@ -82,9 +82,9 @@ io.on("connection", (socket: Socket) => {
   });
 
   socket.on("disconnect", async (userId: string, meetId: string) => {
-    const meetUsers = await request<User[]>({
+    const meetUsers = await request<UserWithSocketId[]>({
       method: "POST",
-      endpoint: `/meetings/removeUser/${meetId}`,
+      endpoint: `/api/meetings/removeUser/${meetId}`,
       data: { userId: userId },
       headers: { "Content-Type": "application/json" },
     });
