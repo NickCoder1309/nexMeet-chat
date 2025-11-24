@@ -34,24 +34,11 @@ io.on("connection", (socket: Socket) => {
   socket.on("newUser", async (userId: string, meetId: string) => {
     if (!meetId || !userId) return;
 
-    const user = await request<UserWithSocketId | BackendError>({
+    const meetUsers = await request<UserWithSocketId | BackendError>({
       method: "PUT",
       endpoint: `/api/meetings/updateOrAddMeetingUser/${meetId}`,
       data: { userId, socketId: socket.id },
       headers: { "Content-Type": "application/json" },
-    });
-
-    if (!user || "error" in user) {
-      socket.emit("socketServerError", {
-        origin: "newUser",
-        message: user && "error" in user ? user.error : "Error inesperado",
-      });
-      return;
-    }
-
-    const meetUsers = await request<UserWithSocketId[] | BackendError>({
-      method: "GET",
-      endpoint: `/api/meets/getMeetingUsers/${meetId}`,
     });
 
     if (!meetUsers || "error" in meetUsers) {
