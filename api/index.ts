@@ -57,11 +57,14 @@ io.on("connection", (socket: Socket) => {
         return;
       }
 
+      const joiningUser = meetUsers.find((u) => u.userId === userId) || null;
+      const leavingUser = null;
+
       console.log(
         `New user with id ${userId}, there's ${meetUsers.length} users.`,
       );
 
-      io.to(meetId).emit("usersOnline", meetUsers);
+      io.to(meetId).emit("usersOnline", meetUsers, joiningUser, leavingUser);
     } catch (error) {
       socket.emit("socketServerError", {
         origin: "backend",
@@ -114,7 +117,10 @@ io.on("connection", (socket: Socket) => {
         return;
       }
 
-      io.to(meetId).emit("usersOnline", meetUsers);
+      const joiningUser = meetUsers.find((u) => u.userId === userId) || null;
+      const leavingUser = null;
+
+      io.to(meetId).emit("usersOnline", meetUsers, joiningUser, leavingUser);
     } catch (error) {
       socket.emit("socketServerError", {
         origin: "backend",
