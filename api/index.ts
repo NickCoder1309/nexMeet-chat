@@ -117,8 +117,8 @@ io.on("connection", (socket: Socket) => {
         return;
       }
 
-      const joiningUser = meetUsers.find((u) => u.userId === userId) || null;
-      const leavingUser = null;
+      const joiningUser = null;
+      const leavingUser = meetUsers.find((u) => u.userId === userId) || null;
 
       io.to(meetId).emit("usersOnline", meetUsers, joiningUser, leavingUser);
     } catch (error) {
