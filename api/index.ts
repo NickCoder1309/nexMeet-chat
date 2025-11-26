@@ -37,14 +37,14 @@ io.on("connection", (socket: Socket) => {
     try {
       if (!meetId || !userId) return;
 
+      socket.data = { userId, meetId };
+
       const meetUsers = await request<UserWithSocketId[] | BackendError>({
         method: "PUT",
         endpoint: `/api/meetings/updateOrAddMeetingUser/${meetId}`,
         data: { userId, socketId: socket.id },
         headers: { "Content-Type": "application/json" },
       });
-
-      socket.join(meetId);
 
       if (!meetUsers || "error" in meetUsers) {
         socket.emit("socketServerError", {
@@ -56,6 +56,8 @@ io.on("connection", (socket: Socket) => {
         });
         return;
       }
+
+      socket.join(meetId);
 
       const joiningUser = meetUsers.find((u) => u.userId === userId) || null;
       const leavingUser = null;
@@ -97,8 +99,42 @@ io.on("connection", (socket: Socket) => {
     }
   });
 
-  socket.on("disconnect", async (userId: string, meetId: string) => {
+  socket.on("manualDisconnect", async (userId: string, meetId: string) => {
     try {
+      const meetUsers = await request<UserWithSocketId[]>({
+        method: "POST",
+        endpoint: `/api/meetings/removeUser/${meetId}`,
+        data: { userId },
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!meetUsers || "error" in meetUsers) {
+        socket.emit("socketServerError", {
+          origin: "disconnect",
+          message:
+            meetUsers && "error" in meetUsers
+              ? meetUsers.error
+              : "Error inesperado",
+        });
+        return;
+      }
+
+      const joiningUser = null;
+      const leavingUser = meetUsers.find((u) => u.userId === userId) || null;
+
+      io.to(meetId).emit("usersOnline", meetUsers, joiningUser, leavingUser);
+    } catch (error) {
+      socket.emit("socketServerError", {
+        origin: "backend",
+        message: error instanceof Error ? error.message : "Error inesperado",
+      });
+    }
+  });
+
+  socket.on("disconnect", async () => {
+    try {
+      const { userId, meetId } = socket.data;
+
       const meetUsers = await request<UserWithSocketId[]>({
         method: "POST",
         endpoint: `/api/meetings/removeUser/${meetId}`,
