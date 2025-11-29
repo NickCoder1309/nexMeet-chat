@@ -84,7 +84,10 @@ io.on("connection", (socket: Socket) => {
 
       try {
         if (!meetId || !userId || !token) {
-          console.log("Missing meetId or userId");
+          socket.emit("chatServerError", {
+            origin: "newUser",
+            message: "Missing parameters",
+          });
           return;
         }
 
@@ -106,7 +109,7 @@ io.on("connection", (socket: Socket) => {
 
         if (!meetUsers || "error" in meetUsers) {
           console.error("Error getting meeting users:", meetUsers);
-          socket.emit("socketServerError", {
+          socket.emit("chatServerError", {
             origin: "newUser",
             message:
               meetUsers && "error" in meetUsers
@@ -134,7 +137,7 @@ io.on("connection", (socket: Socket) => {
         io.to(meetId).emit("usersOnline", meetUsers, joiningUser, leavingUser);
       } catch (error) {
         console.error("Error in newUser:", error);
-        socket.emit("socketServerError", {
+        socket.emit("chatServerError", {
           origin: "backend",
           message: error instanceof Error ? error.message : "Unexpected error",
         });
@@ -178,7 +181,7 @@ io.on("connection", (socket: Socket) => {
       io.to(meetId).emit("newMessage", outgoing);
     } catch (error) {
       console.error("Error in sendMessage:", error);
-      socket.emit("socketServerError", {
+      socket.emit("chatServerError", {
         origin: "backend",
         message: error instanceof Error ? error.message : "Unexpected error",
       });
